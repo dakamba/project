@@ -110,6 +110,16 @@ li.urgent { border-left:5px solid #e74c3c; }
 
 <h1>Student App</h1>
 
+<!-- Авторизация -->
+<div id="auth">
+    <h2>Вход / Регистрация</h2>
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Пароль">
+    <button onclick="register()">Регистрация</button>
+    <button onclick="login()">Вход</button>
+    <p id="authError" style="color:red;"></p>
+</div>
+
 <div class="tab">
     <button class="tablinks active" onclick="openTab(event,'Budget')">Бюджет трекер</button>
     <button class="tablinks" onclick="openTab(event,'Lessons')">Уроки и задания</button>
@@ -170,8 +180,67 @@ li.urgent { border-left:5px solid #e74c3c; }
     <ul id="lessonList"></ul>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
+<!-- Firebase и Chart.js -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-firestore.js";
+import Chart from "https://cdn.jsdelivr.net/npm/chart.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAiLg0MFdlFoK3yp7tgJJD_wdZyrg-gTX8",
+  authDomain: "student-app-4d9b8.firebaseapp.com",
+  projectId: "student-app-4d9b8",
+  storageBucket: "student-app-4d9b8.appspot.com",
+  messagingSenderId: "209911636217",
+  appId: "1:209911636217:web:3b0ae58366508ca1030228",
+  measurementId: "G-TYZ98LXZ72"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// ====== Авторизация ======
+function register(){
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  createUserWithEmailAndPassword(auth,email,password)
+    .then(u => { document.getElementById('auth').style.display='none'; initializeUserData(u.user.uid); })
+    .catch(e => document.getElementById('authError').textContent = e.message);
+}
+
+function login(){
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  signInWithEmailAndPassword(auth,email,password)
+    .then(u => { document.getElementById('auth').style.display='none'; loadUserData(u.user.uid); })
+    .catch(e => document.getElementById('authError').textContent = e.message);
+}
+
+onAuthStateChanged(auth,user=>{
+  if(user){ document.getElementById('auth').style.display='none'; loadUserData(user.uid); }
+  else { document.getElementById('auth').style.display='block'; }
+});
+
+async function initializeUserData(uid){
+  await setDoc(doc(db,"users",uid),{expenses:[], lessons:[]});
+}
+
+async function loadUserData(uid){
+  const docRef = doc(db,"users",uid);
+  const docSnap = await getDoc(docRef);
+  if(docSnap.exists()){
+    expenses = docSnap.data().expenses||[];
+    lessons = docSnap.data().lessons||[];
+  } else { await initializeUserData(uid); }
+  updateList(); updateLessonList();
+}
+
+async function saveUserData(uid){
+  await setDoc(doc(db,"users",uid),{expenses,lessons});
+}
+
 // ====== Вкладки ======
 function openTab(evt, tabName){
     document.querySelectorAll('.tabcontent').forEach(tc => tc.style.display='none');
@@ -181,9 +250,8 @@ function openTab(evt, tabName){
 }
 
 // ====== Бюджет ======
-let expenses = JSON.parse(localStorage.getItem('expenses')) || [];
-let budget = parseFloat(localStorage.getItem('budget')) || 100000;
-document.getElementById('budget').value = budget;
+let expenses = [];
+let budget = 100000;
 
 function addExpense(){
     const desc = document.getElementById('description').value;
@@ -191,19 +259,21 @@ function addExpense(){
     const cat = document.getElementById('category').value;
     if(!desc||!amount) return alert("Заполните все поля!");
     expenses.push({description:desc, amount, category:cat});
-    saveData(); document.getElementById('description').value=''; document.getElementById('amount').value='';
+    document.getElementById('description').value=''; 
+    document.getElementById('amount').value='';
+    if(auth.currentUser) saveUserData(auth.currentUser.uid);
     updateList();
 }
 
 function updateList(){
     const list = document.getElementById('expenseList'); list.innerHTML='';
-    let total = 0;
+    let total=0;
     expenses.forEach((exp,i)=>{
         total+=exp.amount;
         const li=document.createElement('li');
-        li.innerHTML = `
+        li.innerHTML=`
             <span>${exp.description} - ${exp.amount} ₸</span>
-            <span class="desc">Категория: ${exp.category}</span>
+                        <span class="desc">Категория: ${exp.category}</span>
             <div class="buttons">
                 <button onclick="editExpense(${i})">Редактировать</button>
                 <button onclick="deleteExpense(${i})">Удалить</button>
@@ -215,44 +285,61 @@ function updateList(){
     const remElem = document.getElementById('remaining');
     remElem.textContent = remaining;
     remElem.style.color = remaining<0?'#e74c3c':'#27ae60';
-    document.getElementById('alert').textContent = remaining<0?"Бюджет превышен!":""; 
-    updateBudgetBar(); updateChart();
+    document.getElementById('alert').textContent = remaining<0?"Бюджет превышен!":"";
+    updateBudgetBar();
+    updateChart();
 }
 
-function deleteExpense(i){ expenses.splice(i,1); saveData(); updateList(); }
+function deleteExpense(i){
+    expenses.splice(i,1);
+    if(auth.currentUser) saveUserData(auth.currentUser.uid);
+    updateList();
+}
+
 function editExpense(i){
     const exp=expenses[i];
     const desc=prompt("Описание:",exp.description);
     const amount=parseFloat(prompt("Сумма:",exp.amount));
     const cat=prompt("Категория:",exp.category);
-    if(desc && amount && cat){ expenses[i]={description:desc,amount,category:cat}; saveData(); updateList();}
+    if(desc && amount && cat){
+        expenses[i]={description:desc,amount,category:cat};
+        if(auth.currentUser) saveUserData(auth.currentUser.uid);
+        updateList();
+    }
 }
 
 function updateBudgetBar(){
     const total=expenses.reduce((s,e)=>s+e.amount,0);
     const percent=Math.min((total/budget)*100,100);
-    const bar=document.getElementById('budgetBar'); bar.style.width=percent+'%';
+    const bar=document.getElementById('budgetBar'); 
+    bar.style.width=percent+'%';
     bar.style.background = percent>100?'#e74c3c':'#27ae60';
 }
 
+let myChart;
 function updateChart(){
     const catTotals={};
     expenses.forEach(e=>catTotals[e.category]=(catTotals[e.category]||0)+e.amount);
     const ctx=document.getElementById('chart').getContext('2d');
-    if(window.myChart) window.myChart.destroy();
-    window.myChart=new Chart(ctx,{type:'pie',data:{labels:Object.keys(catTotals),datasets:[{data:Object.values(catTotals),backgroundColor:['#ff7675','#74b9ff','#ffeaa7','#55efc4']}]}});
+    if(myChart) myChart.destroy();
+    myChart=new Chart(ctx,{
+        type:'pie',
+        data:{
+            labels:Object.keys(catTotals),
+            datasets:[{data:Object.values(catTotals),backgroundColor:['#ff7675','#74b9ff','#ffeaa7','#55efc4']}]
+        }
+    });
 
     const total=Object.values(catTotals).reduce((a,b)=>a+b,0);
     let text='';
-    for(const cat in catTotals){ text+=`${cat}: ${((catTotals[cat]/total)*100).toFixed(1)}% &nbsp;`; }
+    for(const cat in catTotals){
+        text+=`${cat}: ${((catTotals[cat]/total)*100).toFixed(1)}% &nbsp;`;
+    }
     document.getElementById('percentages').innerHTML=text;
 }
 
-function saveData(){ localStorage.setItem('expenses',JSON.stringify(expenses)); budget=parseFloat(document.getElementById('budget').value)||100000; localStorage.setItem('budget',budget);}
-updateList();
-
 // ====== Уроки ======
-let lessons = JSON.parse(localStorage.getItem('lessons'))||[];
+let lessons = [];
 let currentFilter = 'All';
 
 function addLesson(){
@@ -262,8 +349,11 @@ function addLesson(){
     const priority = document.getElementById('lessonPriority').value;
     if(!title||!desc||!date) return alert("Заполните все поля!");
     lessons.push({title,desc,date,priority,createdDate:new Date().toISOString().split('T')[0],completed:false});
-    saveLessons(); updateLessonList();
-    document.getElementById('lessonTitle').value=''; document.getElementById('lessonDesc').value=''; document.getElementById('lessonDate').value='';
+    document.getElementById('lessonTitle').value='';
+    document.getElementById('lessonDesc').value='';
+    document.getElementById('lessonDate').value='';
+    if(auth.currentUser) saveUserData(auth.currentUser.uid);
+    updateLessonList();
 }
 
 function updateLessonList(){
@@ -305,9 +395,17 @@ function updateLessonList(){
     });
 }
 
-function toggleLesson(i){ lessons[i].completed = !lessons[i].completed; saveLessons(); updateLessonList(); }
-function deleteLesson(i){ lessons.splice(i,1); saveLessons(); updateLessonList(); }
-function saveLessons(){ localStorage.setItem('lessons',JSON.stringify(lessons)); }
+function toggleLesson(i){
+    lessons[i].completed = !lessons[i].completed;
+    if(auth.currentUser) saveUserData(auth.currentUser.uid);
+    updateLessonList();
+}
+
+function deleteLesson(i){
+    lessons.splice(i,1);
+    if(auth.currentUser) saveUserData(auth.currentUser.uid);
+    updateLessonList();
+}
 
 function filterLessons(priority){
     currentFilter = priority;
@@ -319,7 +417,7 @@ function filterLessons(priority){
 // Автообновление приоритетов каждые 30 секунд
 setInterval(updateLessonList,30000);
 
-updateLessonList();
 </script>
 </body>
 </html>
+

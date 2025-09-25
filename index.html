@@ -15,10 +15,7 @@ body {
     color: #2f3640;
 }
 
-h1 {
-    text-align:center;
-    margin-bottom:20px;
-}
+h1 { text-align:center; margin-bottom:20px; }
 
 /* Вкладки */
 .tab {
@@ -36,10 +33,7 @@ h1 {
     margin-right: 5px;
     border-radius: 8px 8px 0 0;
 }
-.tab button.active {
-    background-color: #0984e3;
-    color: white;
-}
+.tab button.active { background-color: #0984e3; color: white; }
 .tab button:hover { background-color:#74b9ff; }
 
 /* Контент вкладки */
@@ -68,7 +62,6 @@ button:hover { background-color:#74b9ff; }
 
 /* Списки */
 ul { list-style:none; padding:0; margin:10px 0; }
-
 li {
     flex-direction: column;
     align-items: flex-start;
@@ -189,49 +182,72 @@ function addExpense(){
     const desc = document.getElementById('description').value;
     const amount = parseFloat(document.getElementById('amount').value);
     const cat = document.getElementById('category').value;
-    if(!desc||!amount) return alert("Заполните все поля!");
-    expenses.push({description:desc, amount, category:cat});
-    saveData(); document.getElementById('description').value=''; document.getElementById('amount').value='';
+    if(!desc || !amount) return alert("Заполните все поля!");
+    
+    // Автоматическая дата и время
+    const dateTime = new Date().toISOString();
+    
+    expenses.push({description: desc, amount, category: cat, dateTime});
+    saveData();
+    document.getElementById('description').value='';
+    document.getElementById('amount').value='';
     updateList();
 }
 
 function updateList(){
-    const list = document.getElementById('expenseList'); list.innerHTML='';
+    const list = document.getElementById('expenseList'); 
+    list.innerHTML='';
     let total = 0;
+
+    // Сортировка по дате (новые сверху)
+    expenses.sort((a,b) => new Date(b.dateTime) - new Date(a.dateTime));
+
     expenses.forEach((exp,i)=>{
-        total+=exp.amount;
-        const li=document.createElement('li');
+        total += exp.amount;
+        const li = document.createElement('li');
+        const formattedDate = new Date(exp.dateTime).toLocaleString();
         li.innerHTML = `
             <span>${exp.description} - ${exp.amount} ₸</span>
             <span class="desc">Категория: ${exp.category}</span>
+            <span class="desc">Дата и время: ${formattedDate}</span>
             <div class="buttons">
                 <button onclick="editExpense(${i})">Редактировать</button>
                 <button onclick="deleteExpense(${i})">Удалить</button>
             </div>`;
         list.appendChild(li);
     });
+
     document.getElementById('total').textContent = total;
-    const remaining = budget-total;
+    const remaining = budget - total;
     const remElem = document.getElementById('remaining');
     remElem.textContent = remaining;
     remElem.style.color = remaining<0?'#e74c3c':'#27ae60';
     document.getElementById('alert').textContent = remaining<0?"Бюджет превышен!":""; 
-    updateBudgetBar(); updateChart();
+
+    updateBudgetBar();
+    updateChart();
 }
 
 function deleteExpense(i){ expenses.splice(i,1); saveData(); updateList(); }
+
 function editExpense(i){
-    const exp=expenses[i];
-    const desc=prompt("Описание:",exp.description);
-    const amount=parseFloat(prompt("Сумма:",exp.amount));
-    const cat=prompt("Категория:",exp.category);
-    if(desc && amount && cat){ expenses[i]={description:desc,amount,category:cat}; saveData(); updateList();}
+    const exp = expenses[i];
+    const desc = prompt("Описание:", exp.description);
+    const amount = parseFloat(prompt("Сумма:", exp.amount));
+    const cat = prompt("Категория:", exp.category);
+    if(desc && amount && cat){
+        // Дата и время сохраняем прежние
+        expenses[i] = {description: desc, amount, category: cat, dateTime: exp.dateTime};
+        saveData();
+        updateList();
+    }
 }
 
 function updateBudgetBar(){
-    const total=expenses.reduce((s,e)=>s+e.amount,0);
-    const percent=Math.min((total/budget)*100,100);
-    const bar=document.getElementById('budgetBar'); bar.style.width=percent+'%';
+    const total = expenses.reduce((s,e) => s+e.amount,0);
+    const percent = Math.min((total/budget)*100,100);
+    const bar = document.getElementById('budgetBar'); 
+    bar.style.width = percent+'%';
     bar.style.background = percent>100?'#e74c3c':'#27ae60';
 }
 
@@ -240,19 +256,31 @@ function updateChart(){
     expenses.forEach(e=>catTotals[e.category]=(catTotals[e.category]||0)+e.amount);
     const ctx=document.getElementById('chart').getContext('2d');
     if(window.myChart) window.myChart.destroy();
-    window.myChart=new Chart(ctx,{type:'pie',data:{labels:Object.keys(catTotals),datasets:[{data:Object.values(catTotals),backgroundColor:['#ff7675','#74b9ff','#ffeaa7','#55efc4']}]}});
+    window.myChart=new Chart(ctx,{
+        type:'pie',
+        data:{
+            labels:Object.keys(catTotals),
+            datasets:[{data:Object.values(catTotals),backgroundColor:['#ff7675','#74b9ff','#ffeaa7','#55efc4']}]
+        }
+    });
 
     const total=Object.values(catTotals).reduce((a,b)=>a+b,0);
     let text='';
-    for(const cat in catTotals){ text+=`${cat}: ${((catTotals[cat]/total)*100).toFixed(1)}% &nbsp;`; }
-    document.getElementById('percentages').innerHTML=text;
+        for(const cat in catTotals){ 
+        text += `${cat}: ${((catTotals[cat]/total)*100).toFixed(1)}% &nbsp;`; 
+    }
+    document.getElementById('percentages').innerHTML = text;
 }
 
-function saveData(){ localStorage.setItem('expenses',JSON.stringify(expenses)); budget=parseFloat(document.getElementById('budget').value)||100000; localStorage.setItem('budget',budget);}
+function saveData(){ 
+    localStorage.setItem('expenses', JSON.stringify(expenses)); 
+    budget = parseFloat(document.getElementById('budget').value) || 100000; 
+    localStorage.setItem('budget', budget);
+}
 updateList();
 
 // ====== Уроки ======
-let lessons = JSON.parse(localStorage.getItem('lessons'))||[];
+let lessons = JSON.parse(localStorage.getItem('lessons')) || [];
 let currentFilter = 'All';
 
 function addLesson(){
@@ -261,13 +289,24 @@ function addLesson(){
     const date = document.getElementById('lessonDate').value;
     const priority = document.getElementById('lessonPriority').value;
     if(!title||!desc||!date) return alert("Заполните все поля!");
-    lessons.push({title,desc,date,priority,createdDate:new Date().toISOString().split('T')[0],completed:false});
-    saveLessons(); updateLessonList();
-    document.getElementById('lessonTitle').value=''; document.getElementById('lessonDesc').value=''; document.getElementById('lessonDate').value='';
+    lessons.push({
+        title, 
+        desc, 
+        date, 
+        priority, 
+        createdDate: new Date().toISOString().split('T')[0], 
+        completed: false
+    });
+    saveLessons(); 
+    updateLessonList();
+    document.getElementById('lessonTitle').value='';
+    document.getElementById('lessonDesc').value='';
+    document.getElementById('lessonDate').value='';
 }
 
 function updateLessonList(){
-    const list = document.getElementById('lessonList'); list.innerHTML='';
+    const list = document.getElementById('lessonList'); 
+    list.innerHTML='';
     const today = new Date();
     const priorityOrder = ['Low','Medium','High'];
 
@@ -277,7 +316,9 @@ function updateLessonList(){
         const totalTime = lessonDate - createdDate;
         const elapsed = today - createdDate;
         const progress = totalTime>0 ? elapsed/totalTime : 1;
-        let step=0; if(progress>=0.9) step=2; else if(progress>=0.6) step=1;
+        let step=0; 
+        if(progress>=0.9) step=2; 
+        else if(progress>=0.6) step=1;
         let dynamicIndex = Math.min(priorityOrder.indexOf(lesson.priority)+step,2);
         const dynamicPriority = priorityOrder[dynamicIndex];
 
@@ -305,9 +346,19 @@ function updateLessonList(){
     });
 }
 
-function toggleLesson(i){ lessons[i].completed = !lessons[i].completed; saveLessons(); updateLessonList(); }
-function deleteLesson(i){ lessons.splice(i,1); saveLessons(); updateLessonList(); }
-function saveLessons(){ localStorage.setItem('lessons',JSON.stringify(lessons)); }
+function toggleLesson(i){ 
+    lessons[i].completed = !lessons[i].completed; 
+    saveLessons(); 
+    updateLessonList(); 
+}
+function deleteLesson(i){ 
+    lessons.splice(i,1); 
+    saveLessons(); 
+    updateLessonList(); 
+}
+function saveLessons(){ 
+    localStorage.setItem('lessons', JSON.stringify(lessons)); 
+}
 
 function filterLessons(priority){
     currentFilter = priority;
